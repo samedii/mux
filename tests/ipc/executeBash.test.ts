@@ -18,7 +18,7 @@ function expectWorkspaceCreationSuccess(result: WorkspaceCreationResult): Worksp
   return result.metadata;
 }
 
-const TEST_TIMEOUT_MS = process.platform === "win32" ? 30_000 : 15_000;
+const TEST_TIMEOUT_MS = process.platform === "win32" ? 60_000 : 30_000;
 // Skip all tests if TEST_INTEGRATION is not set
 const describeIntegration = shouldRunIntegrationTests() ? describe : describe.skip;
 
@@ -35,6 +35,9 @@ describeIntegration("executeBash", () => {
         const metadata = expectWorkspaceCreationSuccess(createResult);
         const workspaceId = metadata.id;
         const client = resolveOrpcClient(env);
+
+        // Wait for init to complete (prevents Windows filesystem timing issues)
+        await waitForInitComplete(env, workspaceId, 30_000);
 
         // Execute a simple bash command (pwd should return workspace path)
         const pwdResult = await client.workspace.executeBash({ workspaceId, script: "pwd" });
@@ -102,6 +105,9 @@ describeIntegration("executeBash", () => {
         const workspaceId = expectWorkspaceCreationSuccess(createResult).id;
         const client = resolveOrpcClient(env);
 
+        // Wait for init to complete (prevents Windows filesystem timing issues)
+        await waitForInitComplete(env, workspaceId, 30_000);
+
         // Execute a command that will fail
         const failResult = await client.workspace.executeBash({
           workspaceId,
@@ -138,6 +144,9 @@ describeIntegration("executeBash", () => {
         const workspaceId = expectWorkspaceCreationSuccess(createResult).id;
         const client = resolveOrpcClient(env);
 
+        // Wait for init to complete (prevents Windows filesystem timing issues)
+        await waitForInitComplete(env, workspaceId, 30_000);
+
         // Execute a command that takes longer than the timeout
         const timeoutResult = await client.workspace.executeBash({
           workspaceId,
@@ -173,6 +182,9 @@ describeIntegration("executeBash", () => {
         const createResult = await createWorkspace(env, tempGitRepo, "test-large-output");
         const workspaceId = expectWorkspaceCreationSuccess(createResult).id;
         const client = resolveOrpcClient(env);
+
+        // Wait for init to complete (prevents Windows filesystem timing issues)
+        await waitForInitComplete(env, workspaceId, 30_000);
 
         // Execute a command that generates 400 lines (well under 10K limit for IPC truncate policy)
         const result = await client.workspace.executeBash({
@@ -280,7 +292,7 @@ describeIntegration("executeBash", () => {
         const client = resolveOrpcClient(env);
 
         // Wait for init to complete (prevents Windows filesystem timing issues)
-        await waitForInitComplete(env, workspaceId);
+        await waitForInitComplete(env, workspaceId, 30_000);
 
         // Verify GIT_TERMINAL_PROMPT is set to 0
         const gitEnvResult = await client.workspace.executeBash({
