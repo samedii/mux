@@ -18,6 +18,7 @@ const BUILT_IN_SOURCES: BuiltInSource[] = [
   { id: "exec", content: BUILTIN_AGENT_CONTENT.exec },
   { id: "plan", content: BUILTIN_AGENT_CONTENT.plan },
   { id: "compact", content: BUILTIN_AGENT_CONTENT.compact },
+  { id: "harness-from-plan", content: BUILTIN_AGENT_CONTENT["harness-from-plan"] },
   { id: "explore", content: BUILTIN_AGENT_CONTENT.explore },
 ];
 
