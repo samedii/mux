@@ -17,6 +17,8 @@ interface SendMessageArgs {
   options: SendMessageOptions;
 }
 
+type StartFromPlanResult = { success: true; data: undefined } | { success: false; error: string };
+
 type GetPlanContentResult =
   | { success: true; data: { content: string; path: string } }
   | { success: false; error: string };
@@ -25,6 +27,9 @@ interface MockApi {
   workspace: {
     getPlanContent: () => Promise<GetPlanContentResult>;
     sendMessage: (args: SendMessageArgs) => Promise<{ success: true; data: undefined }>;
+    loop: {
+      startFromPlan: (args: { workspaceId: string }) => Promise<StartFromPlanResult>;
+    };
   };
 }
 
@@ -69,8 +74,11 @@ void mock.module("@/browser/hooks/useOpenInEditor", () => ({
 }));
 
 void mock.module("@/browser/contexts/WorkspaceContext", () => ({
+  useOptionalWorkspaceContext: () => ({
+    workspaceMetadata: new Map<string, { runtimeConfig?: unknown; name?: string }>(),
+  }),
   useWorkspaceContext: () => ({
-    workspaceMetadata: new Map<string, { runtimeConfig?: unknown }>(),
+    workspaceMetadata: new Map<string, { runtimeConfig?: unknown; name?: string }>(),
   }),
 }));
 
@@ -145,6 +153,9 @@ describe("ProposePlanToolCall", () => {
             success: true,
             data: { content: "# My Plan\n\nDo the thing.", path: planPath },
           }),
+        loop: {
+          startFromPlan: () => Promise.resolve({ success: true, data: undefined }),
+        },
         sendMessage: (args: SendMessageArgs) => {
           sendMessageCalls.push(args);
           return Promise.resolve({ success: true, data: undefined });
@@ -176,6 +187,81 @@ describe("ProposePlanToolCall", () => {
     //
     // Note: some tests in this repo mock the `usePersistedState` module globally. In that case,
     // `updatePersistedState` won't actually write to localStorage here, so we assert the call.
+    const agentKey = getAgentIdKey(workspaceId);
+    const updatePersistedStateMaybeMock = updatePersistedState as unknown as {
+      mock?: { calls: unknown[][] };
+    };
+    if (updatePersistedStateMaybeMock.mock) {
+      expect(updatePersistedState).toHaveBeenCalledWith(agentKey, "exec");
+    } else {
+      expect(JSON.parse(window.localStorage.getItem(agentKey)!)).toBe("exec");
+    }
+  });
+
+  test("switches to exec and starts Ralph loop when clicking Start Ralph loop", async () => {
+    const workspaceId = "ws-123";
+    const planPath = "~/.mux/plans/demo/ws-123.md";
+
+    // Start in plan mode.
+    window.localStorage.setItem(getAgentIdKey(workspaceId), JSON.stringify("plan"));
+
+    const startFromPlanCalls: Array<{ workspaceId: string }> = [];
+
+    let resolveStartFromPlan!: (value: StartFromPlanResult) => void;
+    const startFromPlanPromise = new Promise<StartFromPlanResult>((resolve) => {
+      resolveStartFromPlan = resolve;
+    });
+
+    mockApi = {
+      workspace: {
+        getPlanContent: () =>
+          Promise.resolve({
+            success: true,
+            data: { content: "# My Plan\n\nDo the thing.", path: planPath },
+          }),
+        sendMessage: () => Promise.resolve({ success: true, data: undefined }),
+        loop: {
+          startFromPlan: (args: { workspaceId: string }) => {
+            startFromPlanCalls.push(args);
+            return startFromPlanPromise;
+          },
+        },
+      },
+    };
+
+    const view = render(
+      <TooltipProvider>
+        <ProposePlanToolCall
+          args={{}}
+          status="completed"
+          result={{
+            success: true,
+            planPath,
+            planContent: "# My Plan\n\nDo the thing.",
+          }}
+          workspaceId={workspaceId}
+          isLatest={true}
+        />
+      </TooltipProvider>
+    );
+
+    fireEvent.click(view.getByRole("button", { name: "Start Ralph loop" }));
+
+    await waitFor(() => expect(startFromPlanCalls.length).toBe(1));
+    expect(startFromPlanCalls[0]?.workspaceId).toBe(workspaceId);
+
+    await waitFor(() => {
+      const button = view.getByRole("button", { name: "Start Ralph loop" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    });
+
+    resolveStartFromPlan({ success: true, data: undefined });
+
+    await waitFor(() => {
+      const button = view.getByRole("button", { name: "Start Ralph loop" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
     const agentKey = getAgentIdKey(workspaceId);
     const updatePersistedStateMaybeMock = updatePersistedState as unknown as {
       mock?: { calls: unknown[][] };
