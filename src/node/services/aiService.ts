@@ -1572,6 +1572,9 @@ export class AIService extends EventEmitter {
           // - read: plan file is readable in all modes (useful context)
           // - write: enforced by file_edit_* tools (plan file is read-only outside plan mode)
           mode: effectiveMode,
+          agentId: effectiveAgentId,
+          allowedEditPaths:
+            effectiveAgentId === "harness-init" ? [".mux/harness/*.jsonc"] : undefined,
           emitChatEvent: (event) => {
             // Defensive: tools should only emit events for the workspace they belong to.
             if ("workspaceId" in event && event.workspaceId !== workspaceId) {

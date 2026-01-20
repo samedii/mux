@@ -9,6 +9,7 @@ import { createFileEditReplaceStringTool } from "@/node/services/tools/file_edit
 // DISABLED: import { createFileEditReplaceLinesTool } from "@/node/services/tools/file_edit_replace_lines";
 import { createFileEditInsertTool } from "@/node/services/tools/file_edit_insert";
 import { createAskUserQuestionTool } from "@/node/services/tools/ask_user_question";
+import { createProposeHarnessTool } from "@/node/services/tools/propose_harness";
 import { createProposePlanTool } from "@/node/services/tools/propose_plan";
 import { createTodoWriteTool, createTodoReadTool } from "@/node/services/tools/todo";
 import { createStatusSetTool } from "@/node/services/tools/status_set";
@@ -57,6 +58,15 @@ export interface ToolConfiguration {
   backgroundProcessManager?: BackgroundProcessManager;
   /** Current UI mode (plan or exec) - used for plan file path enforcement */
   mode?: UIMode;
+  /** Active agent id (resolved). Used for tool-level restrictions. */
+  agentId?: string;
+  /**
+   * Optional allowlist of file path globs that may be edited via file_edit_* tools.
+   *
+   * When set, file edit tools will reject edits to paths that don't match.
+   * Relative patterns are resolved against cwd.
+   */
+  allowedEditPaths?: string[];
   /** Plan file path - only this file can be edited in plan mode */
   planFilePath?: string;
   /**
@@ -276,6 +286,8 @@ export async function getToolsForModel(
     // to leave repository in broken state due to issues with concurrent file modifications
     // and line number miscalculations. Use file_edit_replace_string instead.
     // file_edit_replace_lines: wrap(createFileEditReplaceLinesTool(config)),
+
+    propose_harness: wrap(createProposeHarnessTool(config)),
 
     // Sub-agent task orchestration (child workspaces)
     task: wrap(createTaskTool(config)),

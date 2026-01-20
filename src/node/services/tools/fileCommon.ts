@@ -10,6 +10,40 @@ import type { ToolConfiguration } from "@/common/utils/tools/tools";
  */
 export const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 
+function normalizeForGlobMatch(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let regex = "^";
+  const normalized = normalizeForGlobMatch(pattern);
+
+  for (let i = 0; i < normalized.length; i += 1) {
+    const char = normalized[i];
+    if (!char) continue;
+
+    if (char === "*") {
+      const next = normalized[i + 1];
+      if (next === "*") {
+        regex += ".*";
+        i += 1;
+      } else {
+        regex += "[^/]*";
+      }
+      continue;
+    }
+
+    // Escape regex metacharacters.
+    if (/[\\^$.*+?()|[\]{}]/.test(char)) {
+      regex += `\\${char}`;
+    } else {
+      regex += char;
+    }
+  }
+
+  regex += "$";
+  return new RegExp(regex);
+}
 export interface PlanModeValidationError {
   success: false;
   error: string;
@@ -21,6 +55,7 @@ export interface PlanModeValidationError {
  * - Editing plan file outside plan mode (read-only)
  * - Editing non-plan file in plan mode
  * - Path is outside cwd (for non-plan files)
+ * - Path is not allowlisted (when allowedEditPaths is configured)
  *
  * Returns null if validation passes.
  */
@@ -28,9 +63,11 @@ export async function validatePlanModeAccess(
   filePath: string,
   config: ToolConfiguration
 ): Promise<PlanModeValidationError | null> {
+  const isPlanFile = await isPlanFilePath(filePath, config);
+
   // Plan file is always read-only outside plan mode.
   // This is especially important for SSH runtimes, where cwd validation is intentionally skipped.
-  if ((await isPlanFilePath(filePath, config)) && config.mode !== "plan") {
+  if (isPlanFile && config.mode !== "plan") {
     return {
       success: false,
       error: `Plan file is read-only outside plan mode: ${filePath}`,
@@ -39,7 +76,7 @@ export async function validatePlanModeAccess(
 
   // Plan mode restriction: only allow editing the plan file
   if (config.mode === "plan" && config.planFilePath) {
-    if (!(await isPlanFilePath(filePath, config))) {
+    if (!isPlanFile) {
       return {
         success: false,
         error: `In plan mode, only the plan file can be edited. Use path: ${config.planFilePath} (attempted: ${filePath})`,
@@ -54,6 +91,30 @@ export async function validatePlanModeAccess(
         success: false,
         error: pathValidation.error,
       };
+    }
+  }
+
+  // Optional allowlist restriction (e.g., harness-init can only edit its harness config).
+  if (!isPlanFile && config.allowedEditPaths && config.allowedEditPaths.length > 0) {
+    const allowed = config.allowedEditPaths
+      .map((pattern) => pattern.trim())
+      .filter((p) => p.length > 0);
+    if (allowed.length > 0) {
+      const resolvedPath = normalizeForGlobMatch(
+        config.runtime.normalizePath(filePath, config.cwd)
+      );
+      const isAllowed = allowed.some((pattern) => {
+        const resolvedPattern = normalizeForGlobMatch(
+          config.runtime.normalizePath(pattern, config.cwd)
+        );
+        return globToRegExp(resolvedPattern).test(resolvedPath);
+      });
+      if (!isAllowed) {
+        return {
+          success: false,
+          error: `File edits are restricted to: ${allowed.join(", ")} (attempted: ${filePath})`,
+        };
+      }
     }
   }
 

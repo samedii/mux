@@ -2480,9 +2480,11 @@ const ChatInputInner: React.FC<ChatInputProps> = (props) => {
                       aria-label="Send message"
                       className={cn(
                         "inline-flex items-center gap-1 rounded-sm border border-border-light px-1.5 py-0.5 text-[11px] font-medium text-white transition-colors duration-200 disabled:opacity-50",
-                        mode === "plan"
-                          ? "bg-plan-mode hover:bg-plan-mode-hover disabled:hover:bg-plan-mode"
-                          : "bg-exec-mode hover:bg-exec-mode-hover disabled:hover:bg-exec-mode"
+                        agentId === "harness-init"
+                          ? "bg-harness-init-mode hover:bg-harness-init-mode-hover disabled:hover:bg-harness-init-mode"
+                          : mode === "plan"
+                            ? "bg-plan-mode hover:bg-plan-mode-hover disabled:hover:bg-plan-mode"
+                            : "bg-exec-mode hover:bg-exec-mode-hover disabled:hover:bg-exec-mode"
                       )}
                     >
                       <SendHorizontal className="h-3.5 w-3.5" strokeWidth={2.5} />

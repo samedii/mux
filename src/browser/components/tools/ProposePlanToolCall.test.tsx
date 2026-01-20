@@ -17,7 +17,7 @@ interface SendMessageArgs {
   options: SendMessageOptions;
 }
 
-type StartFromPlanResult = { success: true; data: undefined } | { success: false; error: string };
+type SendMessageResult = { success: true; data: undefined } | { success: false; error: string };
 
 type GetPlanContentResult =
   | { success: true; data: { content: string; path: string } }
@@ -26,10 +26,8 @@ type GetPlanContentResult =
 interface MockApi {
   workspace: {
     getPlanContent: () => Promise<GetPlanContentResult>;
-    sendMessage: (args: SendMessageArgs) => Promise<{ success: true; data: undefined }>;
-    loop: {
-      startFromPlan: (args: { workspaceId: string }) => Promise<StartFromPlanResult>;
-    };
+    sendMessage: (args: SendMessageArgs) => Promise<SendMessageResult>;
+    loop: Record<string, unknown>;
   };
 }
 
@@ -198,18 +196,18 @@ describe("ProposePlanToolCall", () => {
     }
   });
 
-  test("switches to exec and starts Ralph loop when clicking Start Ralph loop", async () => {
+  test("switches to harness-init and sends a harness proposal request when clicking Start Ralph loop", async () => {
     const workspaceId = "ws-123";
     const planPath = "~/.mux/plans/demo/ws-123.md";
 
     // Start in plan mode.
     window.localStorage.setItem(getAgentIdKey(workspaceId), JSON.stringify("plan"));
 
-    const startFromPlanCalls: Array<{ workspaceId: string }> = [];
+    const sendMessageCalls: SendMessageArgs[] = [];
 
-    let resolveStartFromPlan!: (value: StartFromPlanResult) => void;
-    const startFromPlanPromise = new Promise<StartFromPlanResult>((resolve) => {
-      resolveStartFromPlan = resolve;
+    let resolveSendMessage!: (value: SendMessageResult) => void;
+    const sendMessagePromise = new Promise<SendMessageResult>((resolve) => {
+      resolveSendMessage = resolve;
     });
 
     mockApi = {
@@ -219,13 +217,11 @@ describe("ProposePlanToolCall", () => {
             success: true,
             data: { content: "# My Plan\n\nDo the thing.", path: planPath },
           }),
-        sendMessage: () => Promise.resolve({ success: true, data: undefined }),
-        loop: {
-          startFromPlan: (args: { workspaceId: string }) => {
-            startFromPlanCalls.push(args);
-            return startFromPlanPromise;
-          },
+        sendMessage: (args: SendMessageArgs) => {
+          sendMessageCalls.push(args);
+          return sendMessagePromise;
         },
+        loop: {},
       },
     };
 
@@ -247,15 +243,17 @@ describe("ProposePlanToolCall", () => {
 
     fireEvent.click(view.getByRole("button", { name: "Start Ralph loop" }));
 
-    await waitFor(() => expect(startFromPlanCalls.length).toBe(1));
-    expect(startFromPlanCalls[0]?.workspaceId).toBe(workspaceId);
+    await waitFor(() => expect(sendMessageCalls.length).toBe(1));
+    expect(sendMessageCalls[0]?.message).toBe(
+      "Generate a Ralph harness from the current plan and propose it"
+    );
 
     await waitFor(() => {
       const button = view.getByRole("button", { name: "Start Ralph loop" }) as HTMLButtonElement;
       expect(button.disabled).toBe(true);
     });
 
-    resolveStartFromPlan({ success: true, data: undefined });
+    resolveSendMessage({ success: true, data: undefined });
 
     await waitFor(() => {
       const button = view.getByRole("button", { name: "Start Ralph loop" }) as HTMLButtonElement;
@@ -267,9 +265,9 @@ describe("ProposePlanToolCall", () => {
       mock?: { calls: unknown[][] };
     };
     if (updatePersistedStateMaybeMock.mock) {
-      expect(updatePersistedState).toHaveBeenCalledWith(agentKey, "exec");
+      expect(updatePersistedState).toHaveBeenCalledWith(agentKey, "harness-init");
     } else {
-      expect(JSON.parse(window.localStorage.getItem(agentKey)!)).toBe("exec");
+      expect(JSON.parse(window.localStorage.getItem(agentKey)!)).toBe("harness-init");
     }
   });
 });

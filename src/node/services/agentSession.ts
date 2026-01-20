@@ -1049,7 +1049,9 @@ export class AgentSession {
       if (
         this.postCompactionContextEnabled &&
         payload.type === "tool-call-end" &&
-        (payload.toolName === "propose_plan" || payload.toolName.startsWith("file_edit_"))
+        (payload.toolName === "propose_plan" ||
+          payload.toolName === "propose_harness" ||
+          payload.toolName.startsWith("file_edit_"))
       ) {
         this.onPostCompactionStateChange?.();
       }
